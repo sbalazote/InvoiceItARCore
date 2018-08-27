@@ -14,9 +14,11 @@ using Android.Support.V4.App;
 using Javax.Microedition.Khronos.Egl;
 using System.Collections.Concurrent;
 using System;
+using System.Collections;
 using Google.AR.Core;
 using Google.AR.Core.Exceptions;
 using Android;
+using Android.Content.Res;
 
 namespace InvoiceIt
 {
@@ -97,6 +99,13 @@ namespace InvoiceIt
                 Finish();
                 return;
             }
+
+            AssetManager assets = this.Assets;
+            var inputStream = assets.Open("myimages.imgdb");
+            AugmentedImageDatabase imageDatabase = AugmentedImageDatabase.Deserialize(mSession, inputStream);
+
+            config.AugmentedImageDatabase = imageDatabase;
+
             mSession.Configure(config);
 
             mGestureDetector = new Android.Views.GestureDetector(this, new SimpleTapGestureDetector
@@ -237,6 +246,33 @@ namespace InvoiceIt
             GLES20.GlViewport(0, 0, width, height);
         }
 
+        public void DetectImages(Frame frame)
+        {
+            // Update loop, in onDrawFrame().
+            //Frame frame = mSession.Update();
+            ICollection updatedAugmentedImages =
+                frame.GetUpdatedTrackables(Java.Lang.Class.FromType(typeof(AugmentedImage)));
+
+            foreach (AugmentedImage img in updatedAugmentedImages)
+            {
+                // Developers can:
+                // 1. Check tracking state.
+                // 2. Render something based on the pose, or attach an anchor.
+                if (img.TrackingState == TrackingState.Tracking)
+                {
+                    // You can also check which image this is based on getName().
+                    if (img.Name == "invoice")
+                    {
+                        // TODO: Render a 3D version of a dog in front of img.getCenterPose().
+                    }
+                    else
+                    {
+                        // TODO: Render a 3D version of a cat in front of img.getCenterPose().
+                    }
+                }
+            }
+        }
+
         public void OnDrawFrame(IGL10 gl)
         {
             // Clear screen to notify driver it should not load any pixels from previous frame.
@@ -256,11 +292,12 @@ namespace InvoiceIt
                 // camera framerate.
                 Frame frame = mSession.Update();
                 Camera camera = frame.Camera;
-
                 // Handle taps. Handling only one tap per frame, as taps are usually low frequency
                 // compared to frame rate.
                 MotionEvent tap = null;
                 mQueuedSingleTaps.TryDequeue(out tap);
+
+                DetectImages(frame);
 
                 if (tap != null && camera.TrackingState == TrackingState.Tracking)
                 {

@@ -71,6 +71,7 @@
     <Compile Include="Resources\Resource.Designer.cs" />
   </ItemGroup>
   <ItemGroup>
+    <AndroidAsset Include="Assets\myimages.imgdb" />
     <None Include="Properties\AndroidManifest.xml" />
     <AndroidResource Include="Resources\raw\light_vertex.shader" />
     <AndroidResource Include="Resources\raw\object_fragment.shader" />
