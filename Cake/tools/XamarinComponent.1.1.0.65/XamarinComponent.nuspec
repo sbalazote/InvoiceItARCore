@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>XamarinComponent</id>
+    <version>1.1.0.65</version>
+    <title>Xamarin Component</title>
+    <authors>Xamarin</authors>
+    <owners>Xamarin</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectUrl>http://developer.xamarin.com/guides/cross-platform/advanced/submitting_components/</projectUrl>
+    <description>Xamarin-Component is a command line utility for packaging and managing component installs for Xamarin Components in Xamarin.iOS and Xamarin.Android projects</description>
+    <summary>A utility for packaging/installing Xamarin components</summary>
+    <copyright>Xamarin</copyright>
+    <language>en-US</language>
+  </metadata>
+</package>
