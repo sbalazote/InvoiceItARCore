@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Google.ARSceneform.Renderin
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Google.ARSceneform.UX", "Sceneform\Google.ARSceneform.UX\Google.ARSceneform.UX.csproj", "{2F060114-61B6-4955-9C08-0CE5C841D852}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sceneform", "Sceneform\Sceneform\Sceneform.csproj", "{EE4F060B-95F9-49F7-80BE-920CB1015767}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -65,6 +67,10 @@ Global
 		{2F060114-61B6-4955-9C08-0CE5C841D852}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2F060114-61B6-4955-9C08-0CE5C841D852}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2F060114-61B6-4955-9C08-0CE5C841D852}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE4F060B-95F9-49F7-80BE-920CB1015767}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE4F060B-95F9-49F7-80BE-920CB1015767}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE4F060B-95F9-49F7-80BE-920CB1015767}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE4F060B-95F9-49F7-80BE-920CB1015767}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
