@@ -1,30 +1,41 @@
-﻿using Android.App;
+﻿using System;
+using Android.App;
 using Android.Support.V7.App;
 using Android.Widget;
 using Android.OS;
 using Android.Opengl;
 using Android.Util;
-using Java.Interop;
 using Javax.Microedition.Khronos.Opengles;
 using Android.Support.Design.Widget;
 using System.Collections.Generic;
 using Android.Views;
 using Android.Support.V4.Content;
 using Android.Support.V4.App;
-using Javax.Microedition.Khronos.Egl;
 using System.Collections.Concurrent;
-using System;
+using Uri = Android.Net.Uri;
+using System.IO;
 using System.Collections;
+using System.Globalization;
+using Android.Content;
 using Google.AR.Core;
 using Google.AR.Core.Exceptions;
-using Android;
 using Android.Content.Res;
+using Android.Graphics;
+using Java.Nio;
+using Camera = Google.AR.Core.Camera;
+using Path = System.IO.Path;
+using Environment = Android.OS.Environment;
+using File = System.IO.File;
+using IOException = Java.IO.IOException;
 
 namespace InvoiceIt
 {
     [Activity(Label = "InvoiceIt", MainLauncher = true, Icon = "@mipmap/bit_logo", Theme = "@style/Theme.AppCompat.NoActionBar", ConfigurationChanges = Android.Content.PM.ConfigChanges.Orientation | Android.Content.PM.ConfigChanges.ScreenSize, ScreenOrientation = Android.Content.PM.ScreenOrientation.Locked)]
     public class MainActivity : AppCompatActivity, GLSurfaceView.IRenderer, Android.Views.View.IOnTouchListener
     {
+        private int _mWidth;
+        private int _mHeight;
+        private bool _capturePicture = false;
         const string TAG = "InvoiceIt";
 
         // Rendering. The Renderers are created here, and initialized when the GL surface is created.
@@ -55,6 +66,11 @@ namespace InvoiceIt
 
             SetContentView(Resource.Layout.Main);
             mSurfaceView = FindViewById<GLSurfaceView>(Resource.Id.surfaceview);
+            Button button = FindViewById<Button>(Resource.Id.fboRecord_button);
+            button.Click += delegate {
+                //button.Text = string.Format("{0} clicks!", count++);
+                this._capturePicture = true;
+            };
             mDisplayRotationHelper = new DisplayRotationHelper(this);
 
             Java.Lang.Exception exception = null;
@@ -101,7 +117,7 @@ namespace InvoiceIt
             }
 
             AssetManager assets = this.Assets;
-            var inputStream = assets.Open("myimages.imgdb");
+            var inputStream = assets.Open("receipts.imgdb");
             AugmentedImageDatabase imageDatabase = AugmentedImageDatabase.Deserialize(mSession, inputStream);
 
             config.AugmentedImageDatabase = imageDatabase;
@@ -176,6 +192,8 @@ namespace InvoiceIt
                 Toast.MakeText(this, "Camera permission is needed to run this application", ToastLength.Long).Show();
                 Finish();
             }
+
+            Plugin.Permissions.PermissionsImplementation.Current.OnRequestPermissionsResult(requestCode, permissions, grantResults);
         }
 
         public override void OnWindowFocusChanged(bool hasFocus)
@@ -244,31 +262,20 @@ namespace InvoiceIt
         {
             mDisplayRotationHelper.OnSurfaceChanged(width, height);
             GLES20.GlViewport(0, 0, width, height);
+            _mWidth = width;
+            _mHeight = height;
         }
 
         public void DetectImages(Frame frame)
         {
-            // Update loop, in onDrawFrame().
-            //Frame frame = mSession.Update();
-            ICollection updatedAugmentedImages =
-                frame.GetUpdatedTrackables(Java.Lang.Class.FromType(typeof(AugmentedImage)));
+            var updatedAugmentedImages = frame.GetUpdatedTrackables(Java.Lang.Class.FromType(typeof(AugmentedImage)));
 
             foreach (AugmentedImage img in updatedAugmentedImages)
             {
-                // Developers can:
-                // 1. Check tracking state.
-                // 2. Render something based on the pose, or attach an anchor.
+                // A tracked image has a match.
                 if (img.TrackingState == TrackingState.Tracking)
                 {
-                    // You can also check which image this is based on getName().
-                    if (img.Name == "invoice")
-                    {
-                        // TODO: Render a 3D version of a dog in front of img.getCenterPose().
-                    }
-                    else
-                    {
-                        // TODO: Render a 3D version of a cat in front of img.getCenterPose().
-                    }
+                    //  TODO save screenshot.
                 }
             }
         }
@@ -401,6 +408,133 @@ namespace InvoiceIt
                 // Avoid crashing the application due to unhandled exceptions.
                 Log.Error(TAG, "Exception on the OpenGL thread", ex);
             }
+
+            if (_capturePicture)
+            {
+                _capturePicture = false;
+                SavePicture(gl);
+            }
+        }
+
+        public static Uri GetOutputMediaFile(Context context, string subdir, string name, bool isPhoto, bool saveToAlbum)
+        {
+            subdir = subdir ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
+                if (isPhoto)
+                    name = "IMG_" + timestamp + ".jpg";
+                else
+                    name = "VID_" + timestamp + ".mp4";
+            }
+
+            var mediaType = (isPhoto) ? Environment.DirectoryPictures : Environment.DirectoryMovies;
+            var directory = saveToAlbum ? Environment.GetExternalStoragePublicDirectory(mediaType) : context.GetExternalFilesDir(mediaType);
+            using (var mediaStorageDir = new Java.IO.File(directory, subdir))
+            {
+                if (!mediaStorageDir.Exists())
+                {
+                    if (!mediaStorageDir.Mkdirs())
+                        throw new IOException("Couldn't create directory, have you added the WRITE_EXTERNAL_STORAGE permission?");
+
+                    if (!saveToAlbum)
+                    {
+                        // Ensure this media doesn't show up in gallery apps
+                        using (var nomedia = new Java.IO.File(mediaStorageDir, ".nomedia"))
+                            nomedia.CreateNewFile();
+                    }
+                }
+
+                return Uri.FromFile(new Java.IO.File(GetUniquePath(mediaStorageDir.Path, name, isPhoto)));
+            }
+        }
+
+        private static string GetUniquePath(string folder, string name, bool isPhoto)
+        {
+            var ext = Path.GetExtension(name);
+            if (ext == string.Empty)
+                ext = ((isPhoto) ? ".jpg" : ".mp4");
+
+            name = Path.GetFileNameWithoutExtension(name);
+
+            var nname = name + ext;
+            var i = 1;
+            while (File.Exists(Path.Combine(folder, nname)))
+                nname = name + "_" + (i++) + ext;
+
+            return Path.Combine(folder, nname);
+        }
+
+        /*public void OnSavePicture(View view)
+        {
+            // Here just a set a flag so we can copy
+            // the image from the onDrawFrame() method.
+            // This is required for OpenGL so we are on the rendering thread.
+            this._capturePicture = true;
+        }
+*/
+
+        /**
+        * Call from the GLThread to save a picture of the current frame.
+        */
+        public void SavePicture(IGL10 mGL)
+        {
+            var pixelData = new int[_mWidth * _mHeight];
+
+            // Read the pixels from the current GL frame.
+            IntBuffer buf = IntBuffer.Wrap(pixelData);
+            IntBuffer ibt = IntBuffer.Allocate(_mWidth * _mHeight);
+
+            buf.Position(0);
+            mGL.GlReadPixels(0, 0, _mWidth, _mHeight, GLES20.GlRgba, GLES20.GlUnsignedByte, buf);
+
+            // Create a file in the Pictures/HelloAR album.
+            var file = new Java.IO.File($"{Environment.GetExternalStoragePublicDirectory(Environment.DirectoryPictures)}/HelloAR", "Img" + DateTime.Now + ".png");
+
+            // Make sure the directory exists
+            if (!file.ParentFile.Exists())
+            {
+                file.ParentFile.Mkdirs();
+            }
+
+            // Convert the pixel data from RGBA to what Android wants, ARGB.
+            var bitmapData = new int[pixelData.Length];
+            for (int i = 0; i < _mHeight; i++)
+            {
+                for (int j = 0; j < _mWidth; j++)
+                {
+                    long p = pixelData[i * _mWidth + j];
+                    long b = (p & 0x00ff0000) >> 16;
+                    long r = (p & 0x000000ff) << 16;
+                    long ga = p & 0xff00ff00;
+                    bitmapData[(_mHeight - i - 1) * _mWidth + j] = (int)(ga | r | b);
+                }
+            }
+
+            // Convert upside down mirror-reversed image to right-side up normal
+            // image.
+            for (int i = 0; i < _mHeight; i++)
+            {
+                for (int j = 0; j < _mWidth; j++)
+                {
+                    ibt.Put((_mHeight - i - 1) * _mWidth + j, buf.Get(i * _mWidth + j));
+                }
+            }
+
+            // Create a bitmap.
+            Bitmap bmp = Bitmap.CreateBitmap(bitmapData, _mWidth, _mHeight, Bitmap.Config.Argb8888);
+
+            //bmp.EraseColor(Color.Argb(0, 255, 255, 255));
+            bmp.CopyPixelsFromBuffer(ibt);
+
+            var fs = new FileStream(file.Path, FileMode.OpenOrCreate);
+            // Write it to disk.
+            //FileOutputStream fos = new FileOutputStream(file);
+            bmp.Compress(Bitmap.CompressFormat.Png, 100, fs);
+            fs.Flush();
+            fs.Close();
+
         }
 
         private void showLoadingMessage()
