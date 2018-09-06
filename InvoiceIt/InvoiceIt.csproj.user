@@ -3,6 +3,7 @@
   <PropertyGroup>
     <AndroidDesignerPreferredTheme>AppTheme</AndroidDesignerPreferredTheme>
     <AndroidDesignerPreferredDevice>Nexus 4</AndroidDesignerPreferredDevice>
-    <SelectedDevice>Motorola XT1635-02</SelectedDevice>
+    <SelectedDevice>Samsung SM-G950F</SelectedDevice>
+    <DefaultDevice>pixel</DefaultDevice>
   </PropertyGroup>
 </Project>

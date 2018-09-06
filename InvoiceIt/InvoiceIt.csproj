@@ -72,7 +72,10 @@
   </ItemGroup>
   <ItemGroup>
     <AndroidAsset Include="Assets\myimages.imgdb" />
-    <None Include="Properties\AndroidManifest.xml" />
+    <AndroidAsset Include="Assets\receipts.imgdb" />
+    <None Include="Properties\AndroidManifest.xml">
+      <SubType>Designer</SubType>
+    </None>
     <AndroidResource Include="Resources\raw\light_vertex.shader" />
     <AndroidResource Include="Resources\raw\object_fragment.shader" />
     <AndroidResource Include="Resources\raw\object_vertex.shader" />
@@ -108,9 +111,6 @@
   </ItemGroup>
   <ItemGroup>
     <AndroidResource Include="Resources\drawable-xxhdpi\ic_launcher.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <AndroidResource Include="Resources\layout\activity_main.axml" />
   </ItemGroup>
   <ItemGroup>
     <AndroidResource Include="Resources\layout\Main.axml" />

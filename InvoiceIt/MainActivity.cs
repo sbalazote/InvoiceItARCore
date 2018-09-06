@@ -1,30 +1,35 @@
-﻿using Android.App;
+﻿using System;
+using Android.App;
 using Android.Support.V7.App;
 using Android.Widget;
 using Android.OS;
 using Android.Opengl;
 using Android.Util;
-using Java.Interop;
 using Javax.Microedition.Khronos.Opengles;
 using Android.Support.Design.Widget;
 using System.Collections.Generic;
 using Android.Views;
 using Android.Support.V4.Content;
 using Android.Support.V4.App;
-using Javax.Microedition.Khronos.Egl;
 using System.Collections.Concurrent;
-using System;
-using System.Collections;
+using System.IO;
 using Google.AR.Core;
 using Google.AR.Core.Exceptions;
-using Android;
 using Android.Content.Res;
+using Android.Graphics;
+using Java.Nio;
+using Config = Google.AR.Core.Config;
+using Environment = Android.OS.Environment;
+using IOException = Java.IO.IOException;
 
 namespace InvoiceIt
 {
     [Activity(Label = "InvoiceIt", MainLauncher = true, Icon = "@mipmap/bit_logo", Theme = "@style/Theme.AppCompat.NoActionBar", ConfigurationChanges = Android.Content.PM.ConfigChanges.Orientation | Android.Content.PM.ConfigChanges.ScreenSize, ScreenOrientation = Android.Content.PM.ScreenOrientation.Locked)]
-    public class MainActivity : AppCompatActivity, GLSurfaceView.IRenderer, Android.Views.View.IOnTouchListener
+    public class MainActivity : AppCompatActivity, GLSurfaceView.IRenderer, View.IOnTouchListener
     {
+        private int _mWidth;
+        private int _mHeight;
+        private bool _capturePicture = false;
         const string TAG = "InvoiceIt";
 
         // Rendering. The Renderers are created here, and initialized when the GL surface is created.
@@ -62,7 +67,7 @@ namespace InvoiceIt
 
             try
             {
-                mSession = new Session(/*context=*/this);
+                mSession = new Session(this);
             }
             catch (UnavailableArcoreNotInstalledException e)
             {
@@ -101,17 +106,18 @@ namespace InvoiceIt
             }
 
             AssetManager assets = this.Assets;
-            var inputStream = assets.Open("myimages.imgdb");
+            var inputStream = assets.Open("receipts.imgdb");
             AugmentedImageDatabase imageDatabase = AugmentedImageDatabase.Deserialize(mSession, inputStream);
-
+            config.SetFocusMode(Config.FocusMode.Auto);
             config.AugmentedImageDatabase = imageDatabase;
 
             mSession.Configure(config);
 
-            mGestureDetector = new Android.Views.GestureDetector(this, new SimpleTapGestureDetector
+            mGestureDetector = new GestureDetector(this, new SimpleTapGestureDetector
             {
-                SingleTapUpHandler = (MotionEvent arg) => {
-                    onSingleTap(arg);
+                SingleTapUpHandler = (MotionEvent arg) =>
+                {
+                    OnSingleTap(arg);
                     return true;
                 },
                 DownHandler = (MotionEvent arg) => true
@@ -138,7 +144,7 @@ namespace InvoiceIt
             {
                 if (mSession != null)
                 {
-                    showLoadingMessage();
+                    ShowLoadingMessage();
                     // Note that order matters - see the note in onPause(), the reverse applies here.
                     mSession.Resume();
                 }
@@ -148,7 +154,7 @@ namespace InvoiceIt
             }
             else
             {
-                ActivityCompat.RequestPermissions(this, new string[] { Android.Manifest.Permission.Camera }, 0);
+                ActivityCompat.RequestPermissions(this, new[] { Android.Manifest.Permission.Camera }, 0);
             }
         }
 
@@ -184,19 +190,11 @@ namespace InvoiceIt
 
             if (hasFocus)
             {
-                // Standard Android full-screen functionality.
-                //Window.DecorView.SystemUiVisibility = Android.Views.SystemUiFlags.LayoutStable
-                //| Android.Views.SystemUiFlags.LayoutHideNavigation
-                //| Android.Views.SystemUiFlags.LayoutFullscreen
-                //| Android.Views.SystemUiFlags.HideNavigation
-                //| Android.Views.SystemUiFlags.Fullscreen
-                //| Android.Views.SystemUiFlags.ImmersiveSticky;
-
                 Window.AddFlags(WindowManagerFlags.KeepScreenOn);
             }
         }
 
-        private void onSingleTap(MotionEvent e)
+        private void OnSingleTap(MotionEvent e)
         {
             // Queue tap if there is space. Tap is lost if queue is full.
             if (mQueuedSingleTaps.Count < 16)
@@ -209,18 +207,16 @@ namespace InvoiceIt
             GLES20.GlClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
             // Create the texture and pass it to ARCore session to be filled during update().
-            mBackgroundRenderer.CreateOnGlThread(/*context=*/this);
-            if (mSession != null)
-                mSession.SetCameraTextureName(mBackgroundRenderer.TextureId);
+            mBackgroundRenderer.CreateOnGlThread(this);
+            mSession?.SetCameraTextureName(mBackgroundRenderer.TextureId);
 
             // Prepare the other rendering objects.
             try
             {
-                mVirtualObject.CreateOnGlThread(/*context=*/this, "andy.obj", "andy.png");
+                mVirtualObject.CreateOnGlThread(this, "andy.obj", "andy.png");
                 mVirtualObject.setMaterialProperties(0.0f, 3.5f, 1.0f, 6.0f);
 
-                mVirtualObjectShadow.CreateOnGlThread(/*context=*/this,
-                    "andy_shadow.obj", "andy_shadow.png");
+                mVirtualObjectShadow.CreateOnGlThread(this, "andy_shadow.obj", "andy_shadow.png");
                 mVirtualObjectShadow.SetBlendMode(ObjectRenderer.BlendMode.Shadow);
                 mVirtualObjectShadow.setMaterialProperties(1.0f, 0.0f, 0.0f, 1.0f);
             }
@@ -231,44 +227,33 @@ namespace InvoiceIt
 
             try
             {
-                mPlaneRenderer.CreateOnGlThread(/*context=*/this, "trigrid.png");
+                mPlaneRenderer.CreateOnGlThread(this, "trigrid.png");
             }
-            catch (Java.IO.IOException e)
+            catch (IOException e)
             {
                 Log.Error(TAG, "Failed to read plane texture");
             }
-            mPointCloud.CreateOnGlThread(/*context=*/this);
+            mPointCloud.CreateOnGlThread(this);
         }
 
         public void OnSurfaceChanged(IGL10 gl, int width, int height)
         {
             mDisplayRotationHelper.OnSurfaceChanged(width, height);
             GLES20.GlViewport(0, 0, width, height);
+            _mWidth = width;
+            _mHeight = height;
         }
 
         public void DetectImages(Frame frame)
         {
-            // Update loop, in onDrawFrame().
-            //Frame frame = mSession.Update();
-            ICollection updatedAugmentedImages =
-                frame.GetUpdatedTrackables(Java.Lang.Class.FromType(typeof(AugmentedImage)));
+            var updatedAugmentedImages = frame.GetUpdatedTrackables(Java.Lang.Class.FromType(typeof(AugmentedImage)));
 
             foreach (AugmentedImage img in updatedAugmentedImages)
             {
-                // Developers can:
-                // 1. Check tracking state.
-                // 2. Render something based on the pose, or attach an anchor.
+                // A tracked image has a match.
                 if (img.TrackingState == TrackingState.Tracking)
                 {
-                    // You can also check which image this is based on getName().
-                    if (img.Name == "invoice")
-                    {
-                        // TODO: Render a 3D version of a dog in front of img.getCenterPose().
-                    }
-                    else
-                    {
-                        // TODO: Render a 3D version of a cat in front of img.getCenterPose().
-                    }
+                    _capturePicture = true;
                 }
             }
         }
@@ -290,8 +275,8 @@ namespace InvoiceIt
                 // Obtain the current frame from ARSession. When the configuration is set to
                 // UpdateMode.BLOCKING (it is by default), this will throttle the rendering to the
                 // camera framerate.
-                Frame frame = mSession.Update();
-                Camera camera = frame.Camera;
+                var frame = mSession.Update();
+                var camera = frame.Camera;
                 // Handle taps. Handling only one tap per frame, as taps are usually low frequency
                 // compared to frame rate.
                 MotionEvent tap = null;
@@ -364,10 +349,9 @@ namespace InvoiceIt
                 {
                     foreach (var plane in planes)
                     {
-                        if (plane.GetType() == Plane.Type.HorizontalUpwardFacing
-                                && plane.TrackingState == TrackingState.Tracking)
+                        if (plane.GetType() == Plane.Type.HorizontalUpwardFacing && plane.TrackingState == TrackingState.Tracking)
                         {
-                            hideLoadingMessage();
+                            HideLoadingMessage();
                             break;
                         }
                     }
@@ -396,25 +380,90 @@ namespace InvoiceIt
                 }
 
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 // Avoid crashing the application due to unhandled exceptions.
                 Log.Error(TAG, "Exception on the OpenGL thread", ex);
             }
+
+            if (_capturePicture)
+            {
+                _capturePicture = false;
+                SavePicture(gl);
+            }
         }
 
-        private void showLoadingMessage()
+        /**
+        * Call from the GLThread to save a picture of the current frame.
+        */
+        public void SavePicture(IGL10 mGL)
+        {
+            var pixelData = new int[_mWidth * _mHeight];
+
+            // Read the pixels from the current GL frame.
+            IntBuffer buf = IntBuffer.Wrap(pixelData);
+            IntBuffer ibt = IntBuffer.Allocate(_mWidth * _mHeight);
+
+            buf.Position(0);
+            mGL.GlReadPixels(0, 0, _mWidth, _mHeight, GLES20.GlRgba, GLES20.GlUnsignedByte, buf);
+
+            // Create a file in the Pictures/HelloAR album.
+            var file = new Java.IO.File($"{Environment.GetExternalStoragePublicDirectory(Environment.DirectoryPictures)}/{TAG}", "Img" + DateTime.Now + ".png");
+
+            // Make sure the directory exists
+            if (!file.ParentFile.Exists())
+            {
+                file.ParentFile.Mkdirs();
+            }
+
+            // Convert the pixel data from RGBA to what Android wants, ARGB.
+            var bitmapData = new int[pixelData.Length];
+            for (var i = 0; i < _mHeight; i++)
+            {
+                for (var j = 0; j < _mWidth; j++)
+                {
+                    long p = pixelData[i * _mWidth + j];
+                    long b = (p & 0x00ff0000) >> 16;
+                    long r = (p & 0x000000ff) << 16;
+                    long ga = p & 0xff00ff00;
+                    bitmapData[(_mHeight - i - 1) * _mWidth + j] = (int)(ga | r | b);
+                }
+            }
+
+            // Convert upside down mirror-reversed image to right-side up normal
+            // image.
+            for (var i = 0; i < _mHeight; i++)
+            {
+                for (var j = 0; j < _mWidth; j++)
+                {
+                    ibt.Put((_mHeight - i - 1) * _mWidth + j, buf.Get(i * _mWidth + j));
+                }
+            }
+
+            // Create a bitmap.
+            Bitmap bmp = Bitmap.CreateBitmap(bitmapData, _mWidth, _mHeight, Bitmap.Config.Argb8888);
+
+            bmp.CopyPixelsFromBuffer(ibt);
+
+            // Write it to disk.
+            var fs = new FileStream(file.Path, FileMode.OpenOrCreate);
+            bmp.Compress(Bitmap.CompressFormat.Png, 100, fs);
+            fs.Flush();
+            fs.Close();
+
+        }
+
+        private void ShowLoadingMessage()
         {
             this.RunOnUiThread(() =>
             {
-                mLoadingMessageSnackbar = Snackbar.Make(FindViewById(Android.Resource.Id.Content),
-        "Searching for surfaces...", Snackbar.LengthIndefinite);
-                mLoadingMessageSnackbar.View.SetBackgroundColor(Android.Graphics.Color.DarkGray);
+                mLoadingMessageSnackbar = Snackbar.Make(FindViewById(Android.Resource.Id.Content), "Searching for invoices...", Snackbar.LengthIndefinite);
+                mLoadingMessageSnackbar.View.SetBackgroundColor(Color.DarkGray);
                 mLoadingMessageSnackbar.Show();
             });
         }
 
-        private void hideLoadingMessage()
+        private void HideLoadingMessage()
         {
             this.RunOnUiThread(() =>
             {
